@@ -6,14 +6,46 @@ on getScreenDimensions()
     end tell
 end getScreenDimensions
 
+-- Function to check if window title matches any pattern
+on matchesCallPattern(windowTitle, patterns)
+    log "====== Pattern Matching ======"
+    log "Window title: " & windowTitle
+    
+    repeat with pattern in patterns
+        if windowTitle contains pattern as text then
+            log "✓ Match found with pattern: " & (pattern as text)
+            return true
+        end if
+    end repeat
+    
+    log "✗ No match found"
+    return false
+end matchesCallPattern
+
 -- Function to move Teams call window to left side of screen
 on moveTeamsCallWindow()
+    log "=== Script Start ==="
+    
+    -- Load configuration from config.applescript
+    set configPath to ((path to me as text) & "::config.applescript") as alias
+    try
+        set configScript to load script configPath
+        set callWindowPatterns to configScript's getPatterns()
+        log "Successfully loaded patterns from config"
+    on error errMsg
+        log "Failed to load config: " & errMsg
+        -- Fallback patterns if config loading fails
+        set callWindowPatterns to {"Calls", "Daily", "Stand Up", "Meeting", "Call", "conversation", "General", "| Meeting", "| Call"}
+        log "Using fallback patterns"
+    end try
+
     -- Check if Teams is running
     tell application "System Events"
         set teamsRunning to exists process "Microsoft Teams"
     end tell
     
     if not teamsRunning then
+        log "ERROR: Teams is not running"
         display dialog "Microsoft Teams is not running"
         return
     end if
@@ -27,95 +59,37 @@ on moveTeamsCallWindow()
     set newHeight to screenHeight
     
     -- Find and move the Teams call window
+    set callWindowFound to false
+    
     tell application "System Events"
         tell process "Microsoft Teams"
-            set callWindowFound to false
             set teamWindows to every window
-            set windowCount to count of teamWindows
-            
-            -- Approach 1: If there are exactly 2 windows, one is likely the call window
-            if windowCount = 2 then
-                repeat with i from 1 to windowCount
-                    set currentWindow to item i of teamWindows
-                    try
-                        set winTitle to title of currentWindow
-                        -- Check if it's NOT the main window
-                        if winTitle does not contain "Microsoft Teams" and winTitle does not contain "Teams" then
-                            -- This is likely the call window
-                            set position of currentWindow to {screenX, screenY}
-                            set size of currentWindow to {newWidth, newHeight}
-                            set callWindowFound to true
-                            exit repeat
-                        end if
-                    on error
-                        -- Continue if we can't get the title
-                    end try
-                end repeat
-            end if
-            
-            -- Approach 2: Check for call-related UI elements (if first approach failed)
-            if not callWindowFound then
-                repeat with theWindow in teamWindows
-                    try
-                        -- Look for UI elements typical in call windows like buttons
-                        set uiElements to UI elements of theWindow
-                        repeat with elem in uiElements
-                            try
-                                set elemDesc to description of elem
-                                if elemDesc contains "microphone" or elemDesc contains "camera" or elemDesc contains "mute" then
-                                    -- Found call controls, this is likely the call window
-                                    set position of theWindow to {screenX, screenY}
-                                    set size of theWindow to {newWidth, newHeight}
-                                    set callWindowFound to true
-                                    exit repeat
-                                end if
-                            on error
-                                -- Continue checking other elements
-                            end try
-                        end repeat
-                        if callWindowFound then exit repeat
-                    on error
-                        -- Skip windows we can't examine
-                    end try
-                end repeat
-            end if
-            
-            -- Approach 3: Extended title checking (if first two approaches failed)
-            if not callWindowFound then
-                repeat with theWindow in teamWindows
-                    try
-                        set winTitle to title of theWindow
-                        -- More comprehensive title checks
-                        if winTitle contains "Meeting" or winTitle contains "Call" or winTitle contains "conversation" or winTitle contains "| " or (winTitle contains ":" and winTitle does not contain "Microsoft Teams") then
-                            -- This is likely the call window
-                            set position of theWindow to {screenX, screenY}
-                            set size of theWindow to {newWidth, newHeight}
-                            set callWindowFound to true
-                            exit repeat
-                        end if
-                    on error
-                        -- Skip windows without accessible titles
-                    end try
-                end repeat
-            end if
-            
-            -- Fallback: If all else fails, try the frontmost window
-            if not callWindowFound and windowCount > 0 then
+            repeat with theWindow in teamWindows
                 try
-                    set frontWindow to item 1 of teamWindows
-                    set position of frontWindow to {screenX, screenY}
-                    set size of frontWindow to {newWidth, newHeight}
-                    set callWindowFound to true
+                    set winTitle to title of theWindow
+                    -- Store the title for pattern matching outside the tell block
+                    set windowMatches to my matchesCallPattern(winTitle, callWindowPatterns)
+                    if windowMatches then
+                        -- Found matching window, move it
+                        set position of theWindow to {screenX, screenY}
+                        set size of theWindow to {newWidth, newHeight}
+                        set callWindowFound to true
+                        log "✓ Window moved successfully"
+                        exit repeat
+                    end if
                 on error errMsg
-                    display dialog "Error positioning Teams window: " & errMsg
+                    log "ERROR processing window: " & errMsg
                 end try
-            end if
-            
-            if not callWindowFound then
-                display dialog "No active Teams call window found"
-            end if
+            end repeat
         end tell
     end tell
+    
+    if not callWindowFound then
+        log "✗ No matching window found"
+        display dialog "No matching Teams window found"
+    end if
+    
+    log "=== Script End ==="
 end moveTeamsCallWindow
 
 -- Execute the script

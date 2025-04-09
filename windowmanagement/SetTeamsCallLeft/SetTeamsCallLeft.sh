@@ -3,8 +3,11 @@
 # Get the directory of the current script
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Find the first .applescript file in the script directory
-SCRIPT_NAME=$(find "$SCRIPT_DIR" -maxdepth 1 -name "*.applescript" -print -quit)
+# Get the base directory name
+BASE_NAME=$(basename "$SCRIPT_DIR")
+
+# Find the matching .applescript file
+SCRIPT_NAME=$(find "$SCRIPT_DIR" -maxdepth 1 -name "${BASE_NAME}.applescript" -print -quit)
 
 # Check if an .applescript file was found
 if [ -z "$SCRIPT_NAME" ]; then
